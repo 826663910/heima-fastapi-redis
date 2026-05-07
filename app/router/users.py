@@ -1,0 +1,98 @@
+# 路由器, 依赖注入, http异常信息, 状态码, 请求, 表单
+from fastapi import APIRouter, Depends, HTTPException, status, Request, Form
+from sqlalchemy.ext.asyncio import AsyncSession  # 导入异步会话类注解
+from sqlalchemy import select  # 导入select函数
+from typing import Optional # 导入可选类型注解
+# 需要安装 pip install phonenumbers
+import phonenumbers   # 用于解析和格式化手机号码
+from phonenumbers import is_valid_number    # 验证手机号码是否有效
+from ..database import get_db   # 导入获取异步会话的函数
+from .. import models, schemas  # 导入模型和模式
+import random  # 用于生成随机验证码
+import string  # 用于生成随机字符串
+
+# 路由前缀, 标签
+router = APIRouter(
+    prefix="/user",
+    tags=["user"]
+)
+
+
+"""点击发送验证码的接口"""
+@router.post("/code")
+async def register(phone: str, request: Request, db: AsyncSession = Depends(get_db)):
+    # 1. 检验手机号
+    validated_phone = phonenumbers.parse(phone, "CN")
+    # 如果手机号不合法, 抛出422异常
+    if not is_valid_number(validated_phone):
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="手机号有误")
+    
+    # 2. 生成验证码
+    code = str(random.randint(100000, 999999))
+    # 3. 保存验证码到session
+    request.session["code"] = code
+    # 4. 发送验证码
+    print(f'发送验证码: {code} 到手机号: {phone}')
+    # 5. 返回响应
+    return {"msg": "ok"}
+
+
+"""随机字符串函数"""
+def random_string(length: int = 8) -> str:
+    """生成包含字母和数字的随机字符串"""
+    chars = string.ascii_letters + string.digits  # 大小写字母+数字
+    return ''.join(random.choice(chars) for _ in range(length))
+
+
+"""创建用户的函数"""
+async def create_user(phone: str, db: AsyncSession):
+    # 创建用户对象
+    user = models.User(phone=phone, nick_name='user_' + random_string(5))
+    # 添加到数据库
+    db.add(user)
+    await db.commit() # 提交事务
+    await db.refresh(user)  # 刷新用户对象
+    return user.id  # 返回用户id
+
+
+"""登录和注册接口"""
+@router.post("/login")
+async def login(request: Request, db: AsyncSession = Depends(get_db),   
+                phone: str = Form(...), code: str = Form(...),     # 表单提交, ...表示必填
+                password: Optional[str] = Form(None)):  # 可选密码字段
+    
+    # 1. 校验手机号和验证码
+    validated_phone = phonenumbers.parse(phone, "CN")
+    # 如果手机号不合法, 抛出422异常
+    if not is_valid_number(validated_phone):
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="手机号有误")
+
+    # 2.校验验证码
+    session_code = request.session.get('code')
+    print(session_code)
+    if session_code != code:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="验证码有误")
+
+    # 3. 一致, 根据手机号查询用户
+    stmt = select(models.User).where(models.User.phone == phone)
+    result = await db.execute(stmt)  # 执行查询
+    user = result.scalar_one_or_none()   # 获取查询结果, 如果没有结果, 返回None
+
+    # 4. 判断用户是否存在
+    if user is None:
+        # 5. 不存在创建新用户并保存
+        user_id = await create_user(phone, db)
+    else:
+        # 用户已存在，使用现有用户id
+        user_id = user.id
+    
+    print(user_id)
+
+    # 6. 保存用户id到session, 这个会自动保存到cookie中
+    request.session['user_id'] = user_id
+
+    return {"msg": "登录成功"}
+
+
+"""检验接口"""
+
