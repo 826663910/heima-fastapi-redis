@@ -10,12 +10,22 @@ from ..database import get_db   # 导入获取异步会话的函数
 from .. import models, schemas  # 导入模型和模式
 import random  # 用于生成随机验证码
 import string  # 用于生成随机字符串
+# 安装依赖 pip install httpx 
+import httpx
 
 # 路由前缀, 标签
 router = APIRouter(
     prefix="/user",
     tags=["user"]
 )
+
+"""发送验证码的请求函数"""
+async def request_code(code: str, phone: str):
+    body = {'name': '推送助手', 'code': code, 'to': phone} 
+    async with httpx.AsyncClient(timeout=10.0) as client:   # 异步的上下文管理器
+        res = await client.post('https://push.spug.cc/sms/4_YCGgRIS7C3ABq6ufhycg', json=body)
+        print(res.text)
+        return res
 
 
 """点击发送验证码的接口"""
@@ -32,7 +42,10 @@ async def register(phone: str, request: Request, db: AsyncSession = Depends(get_
     # 3. 保存验证码到session
     request.session["code"] = code
     # 4. 发送验证码
-    print(f'发送验证码: {code} 到手机号: {phone}')
+    # print(f'发送验证码: {code} 到手机号: {phone}')
+    res = await request_code(code, phone)
+    if res.status_code != 200: 
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail='短信发送失败')
     # 5. 返回响应
     return {"msg": "ok"}
 
@@ -69,7 +82,6 @@ async def login(request: Request, db: AsyncSession = Depends(get_db),
 
     # 2.校验验证码
     session_code = request.session.get('code')
-    print(session_code)
     if session_code != code:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="验证码有误")
 
@@ -85,8 +97,6 @@ async def login(request: Request, db: AsyncSession = Depends(get_db),
     else:
         # 用户已存在，使用现有用户id
         user_id = user.id
-    
-    print(user_id)
 
     # 6. 保存用户id到session, 这个会自动保存到cookie中
     request.session['user_id'] = user_id
