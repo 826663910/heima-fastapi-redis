@@ -106,10 +106,10 @@ async def login(request: Request, db: AsyncSession = Depends(get_db),
 
 """获取当前用户信息"""
 @router.get('/user/me', response_model=schemas.UserOut)
-async def test(request: Request, db: AsyncSession = Depends(get_db),
+async def userinfo(request: Request, db: AsyncSession = Depends(get_db),
                current_user: dict = Depends(auth.check_login)):
     # 查询当前用户
-    stmt = select(models.User).where(models.User.id == current_user.id)
+    stmt = select(models.User).where(models.User.id == current_user['id'])
     # 执行sql
     result = await db.execute(stmt)
     # 返回数据或者None
