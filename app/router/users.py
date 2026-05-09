@@ -7,7 +7,7 @@ from typing import Optional # 导入可选类型注解
 import phonenumbers   # 用于解析和格式化手机号码
 from phonenumbers import is_valid_number    # 验证手机号码是否有效
 from ..database import get_db   # 导入获取异步会话的函数
-from .. import models, schemas  # 导入模型和模式
+from .. import models, schemas, auth  # 导入模型和模式
 import random  # 用于生成随机验证码
 import string  # 用于生成随机字符串
 # 安装依赖 pip install httpx 
@@ -42,10 +42,10 @@ async def register(phone: str, request: Request, db: AsyncSession = Depends(get_
     # 3. 保存验证码到session
     request.session["code"] = code
     # 4. 发送验证码
-    # print(f'发送验证码: {code} 到手机号: {phone}')
-    res = await request_code(code, phone)
-    if res.status_code != 200: 
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail='短信发送失败')
+    print(f'发送验证码: {code} 到手机号: {phone}')
+    # res = await request_code(code, phone)
+    # if res.status_code != 200: 
+    #     raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail='短信发送失败')
     # 5. 返回响应
     return {"msg": "ok"}
 
@@ -65,7 +65,7 @@ async def create_user(phone: str, db: AsyncSession):
     db.add(user)
     await db.commit() # 提交事务
     await db.refresh(user)  # 刷新用户对象
-    return user.id  # 返回用户id
+    return schemas.UserInfo.model_validate(user).model_dump()  # 返回用户id
 
 
 """登录和注册接口"""
@@ -93,16 +93,26 @@ async def login(request: Request, db: AsyncSession = Depends(get_db),
     # 4. 判断用户是否存在
     if user is None:
         # 5. 不存在创建新用户并保存
-        user_id = await create_user(phone, db)
+        user = await create_user(phone, db)
     else:
         # 用户已存在，使用现有用户id
-        user_id = user.id
-
-    # 6. 保存用户id到session, 这个会自动保存到cookie中
-    request.session['user_id'] = user_id
+        user = schemas.UserInfo.model_validate(user).model_dump()
+    
+    # 6. 保存用户到session, 这个会自动保存到cookie中
+    request.session['user'] = user
 
     return {"msg": "登录成功"}
 
 
-"""检验接口"""
-
+@router.get('/user/{id}', response_model=schemas.UserOut)
+async def test(id: int, request: Request, db: AsyncSession = Depends(get_db),
+               current_user: dict = Depends(auth.check_login)):
+    # 查询当前用户
+    stmt = select(models.User).where(models.User.id == id)
+    # 执行sql
+    result = await db.execute(stmt)
+    # 返回数据或者None
+    user = result.scalar_one_or_none()
+    if user == None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="用户不存在")
+    return user
