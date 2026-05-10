@@ -1,3 +1,5 @@
+from fastapi import Request
+import redis.asyncio as redis
 # pip install sqlalchemy[aiomysql]
 # 导入异步引擎, 异步会话类, 异步会话工厂
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
@@ -39,7 +41,7 @@ async_session_maker = async_sessionmaker(
 # 声明基类
 Base = declarative_base()
 
-# 获取异步会话
+# 获取异步数据库会话
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
     async with async_session_maker() as session:
         try:
@@ -47,8 +49,16 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
         finally:
             pass
 
+
+"""异步依赖, 获取redis客户端"""
+async def get_redis(request: Request) -> redis.Redis:
+    return request.app.state.redis
+
+
+
 # 在启动时创建数据库表(数据表不存在时, 异步执行create_all)
 async def init_db():
     from . import models
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+
