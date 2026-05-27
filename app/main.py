@@ -8,6 +8,7 @@ from starlette.middleware.sessions import SessionMiddleware  # 会话中间件
 from .router import users  # 路由
 # pip install redis
 import redis.asyncio as redis   # 异步redis
+from .config import settings
 
 # 在应用启动时, 调用init_db函数, 来执行create_all, 完成后自动关闭
 @asynccontextmanager
@@ -18,8 +19,8 @@ async def lifespan(app: FastAPI):
 
     # 2. 初始化redis连接池, 异步环境
     pool = redis.ConnectionPool.from_url(
-        "redis://192.168.139.128:6379/0", 
-        password='123456', 
+        f"redis://{settings.redis_ip}:{settings.redis_port}/{settings.redis_db}", 
+        password=f'{settings.redis_password}', 
         decode_responses=True, 
         max_connections=100,       # 最大连接数
         socket_timeout=3,          # 连接满载时, 等待可用连接的超时时间
