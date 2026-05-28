@@ -8,7 +8,7 @@ from starlette.middleware.sessions import SessionMiddleware  # 会话中间件
 from .router import users  # 路由
 # pip install redis
 import redis.asyncio as redis   # 异步redis
-from .config import settings
+from .config import settings    # 导入配置文件
 
 # 在应用启动时, 调用init_db函数, 来执行create_all, 完成后自动关闭
 @asynccontextmanager

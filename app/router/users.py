@@ -11,7 +11,7 @@ from .. import models, schemas, auth  # 导入模型和模式
 import random  # 用于生成随机验证码
 import string  # 用于生成随机字符串
 # 安装依赖 pip install httpx 
-import httpx
+import httpx    # 请求库, 可异步
 
 # 路由前缀, 标签
 router = APIRouter(
