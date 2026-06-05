@@ -11,7 +11,24 @@ class UserInfo(BaseModel):
         from_attributes=True
 
 
+# 响应
 class UserOut(BaseModel):
     id: int
     nick_name: str
-    
+
+
+class ShopListOut(BaseModel):
+    id: int
+    name: str
+    typeId: int
+    avgPrice: int
+    score: int
+    comment: int
+
+class ShopDetailOut(ShopListOut):
+    area: str
+    address: str
+    openHours: str
+    images: str
+    x: float
+    y: float
