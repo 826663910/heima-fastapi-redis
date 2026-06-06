@@ -1,4 +1,5 @@
 from pydantic import BaseModel
+from typing import Optional
 
 # 验证用户信息
 class UserInfo(BaseModel):
@@ -23,12 +24,12 @@ class ShopListOut(BaseModel):
     typeId: int
     avgPrice: int
     score: int
-    comment: int
+    comments: int
 
 class ShopDetailOut(ShopListOut):
     area: str
     address: str
     openHours: str
-    images: str
+    images: Optional[str] = None
     x: float
     y: float
