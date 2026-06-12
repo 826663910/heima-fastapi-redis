@@ -33,3 +33,16 @@ class ShopDetailOut(ShopListOut):
     images: Optional[str] = None
     x: float
     y: float
+
+class ShopUpdate(BaseModel):
+    name: Optional[str] = None
+    typeId: Optional[int] = None
+    avgPrice: Optional[int] = None
+    score: Optional[int] = None
+    comments: Optional[int] = None
+    area: Optional[str] = None
+    address: Optional[str] = None
+    openHours: Optional[str] = None
+    images: Optional[str] = None
+    x: Optional[float] = None
+    y: Optional[float] = None

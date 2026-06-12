@@ -24,6 +24,7 @@ async def get_shops(db: Annotated[AsyncSession, '数据库会话', Depends(get_d
 
     # 2. 判断是否存在
     if shops:
+        print('命中缓存')
         # 3. 存在缓存, 直接返回商铺信息
         shops = json.loads(shops)   # 反序列化, 将json字符串, 转为py对象
         return shops
@@ -53,8 +54,9 @@ async def get_shop(id:int, db: Annotated[AsyncSession, '数据库会话', Depend
                    r: Annotated[redis.Redis, 'redis客户端', Depends(get_redis)]):
     # 1. 从redis中查询商铺缓存
     shop = await r.get(f"shop:detail:{id}")
-    # 2. 判断是否存在
+    # 2. 判断缓存是否存在
     if shop:
+        print('命中缓存')
         # 3. 存在缓存, 直接返回商铺信息
         shop = json.loads(shop)   # 反序列化, 将json字符串, 转为py对象
         return shop
@@ -75,4 +77,31 @@ async def get_shop(id:int, db: Annotated[AsyncSession, '数据库会话', Depend
     await r.setex(f"shop:detail:{id}", 300, shop_json)
 
     # 7. 返回商铺信息
+    return shop
+
+
+# 商铺更新
+@router.patch('/{id}')
+async def update_shop(id:int, shop_data: schemas.ShopUpdate,
+                      db: Annotated[AsyncSession, '数据库会话', Depends(get_db)],
+                      r: Annotated[redis.Redis, 'redis客户端', Depends(get_redis)]):
+    # 1. 查询店铺id是否存在, 
+    stmt = select(models.Shop).where(models.Shop.id==id)
+    result = await db.execute(stmt)
+    shop = result.scalar_one_or_none()
+    # 不存在报错404
+    if shop == None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="商铺不存在")
+    
+    # 2.存在, 更新数据库
+    for key, value in shop_data.model_dump().items():
+        if value is not None:
+            setattr(shop, key, value)
+    await db.commit()   # 提交
+    await db.refresh(shop)  # 刷新shop对象
+
+    # 3.删除缓存
+    await r.delete(f"shop:detail:{id}")
+
+    # 返回
     return shop
