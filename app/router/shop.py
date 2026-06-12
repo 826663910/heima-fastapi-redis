@@ -102,6 +102,18 @@ async def update_shop(id:int, shop_data: schemas.ShopUpdate,
 
     # 3.删除缓存
     await r.delete(f"shop:detail:{id}")
+    
+    # 4. 删除所有列表缓存（模糊匹配 shop:list:cat_*）
+    pattern = "shop:list:cat_*"
+    cursor = 0  # 初始有标配
+    keys_to_delete = []  # 放缓存key的列表
+    while True:
+        cursor, batch = await r.scan(cursor, match=pattern, count=100)  # 扫描redis, 获取匹配的key
+        keys_to_delete.extend(batch)    # 将扫描出来的key, 放入列表
+        if cursor == 0: 
+            break
+    if keys_to_delete:
+        await r.delete(*keys_to_delete)
 
     # 返回
     return shop
