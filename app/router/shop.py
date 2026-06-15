@@ -7,6 +7,7 @@ from .. import models, schemas  # 导入模型和模式
 import redis.asyncio as redis # 异步redis客户端
 from typing import Optional, Annotated, List
 import json # 用于序列化和反序列化
+from random import randint
 
 
 router = APIRouter(
@@ -41,8 +42,8 @@ async def get_shops(db: Annotated[AsyncSession, '数据库会话', Depends(get_d
     shops = jsonable_encoder(shops)  # 将orm对象, 转为py对象
     shops_json = json.dumps(shops, ensure_ascii=False)   # 序列化, 将py对象, 转为json字符串
 
-    # 5. 写入redis缓存中, 300秒后过期
-    await r.setex(f"shop:list:cat_{category_name or 'all'}:{limit}:{skip}", 300, shops_json)
+    # 5. 写入redis缓存中, 300秒+随机时间, 防止缓存雪崩
+    await r.setex(f"shop:list:cat_{category_name or 'all'}:{limit}:{skip}", 300 + randint(0, 120), shops_json)
 
     # 6. 返回商铺信息
     return shops
@@ -57,6 +58,8 @@ async def get_shop(id:int, db: Annotated[AsyncSession, '数据库会话', Depend
     # 2. 判断缓存是否存在
     if shop:
         print('命中缓存')
+        if shop == 'null':
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="商铺不存在")
         # 3. 存在缓存, 直接返回商铺信息
         shop = json.loads(shop)   # 反序列化, 将json字符串, 转为py对象
         return shop
@@ -66,15 +69,16 @@ async def get_shop(id:int, db: Annotated[AsyncSession, '数据库会话', Depend
     result = await db.execute(stmt)
     shop = result.scalar_one_or_none()
 
-    # 5. 查询数据库, 不存在id, 返回错误404
+    # 5. 查询数据库后, 如果不存在id, 将null写入缓存, 防止缓存穿透, 并且返回错误404
     if shop is None:
+        await r.setex(f"shop:detail:{id}", 60, 'null')
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="商铺不存在")
     
     shop = jsonable_encoder(shop)   # 将orm对象, 转为py对象
     shop_json = json.dumps(shop, ensure_ascii=False)   # 序列化, 将py对象, 转为json字符串
 
-    # 6. 存在id, 写入redis缓存中, 300秒后过期
-    await r.setex(f"shop:detail:{id}", 300, shop_json)
+    # 6. 存在id, 写入redis缓存中, 300秒+随机时间, 防止缓存雪崩
+    await r.setex(f"shop:detail:{id}", 300 + randint(0, 120), shop_json)
 
     # 7. 返回商铺信息
     return shop
