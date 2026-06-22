@@ -29,7 +29,7 @@ class ShopListOut(BaseModel):
 class ShopDetailOut(ShopListOut):
     area: str
     address: str
-    openHours: str
+    openHours: Optional[str] = None
     images: Optional[str] = None
     x: float
     y: float
