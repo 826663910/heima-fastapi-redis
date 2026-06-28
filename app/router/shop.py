@@ -10,7 +10,7 @@ import json # 用于序列化和反序列化
 from random import randint
 from redis.exceptions import LockError
 import time
-
+import asyncio  # 异步io
 
 router = APIRouter(
     prefix="/shop",
@@ -120,10 +120,20 @@ async def get_shop(id:int, db: Annotated[AsyncSession, '数据库会话', Depend
         if expire_at > int(time.time() * 1000):
             # 4. 未过期, 直接返回
             return shop_data
-        # 5. 过期, 重建缓存
+        # 5. 过期, 重建缓存, 2秒后自动删除, 防止死锁
+        lock = await r.set(lock_key, '1', nx=True, ex=2)
+
+        # 如果抢到了锁
+        if lock:
+            # 开启异步任务, 刷新缓存
+            asyncio.create_task(refresh_cache(id, db, r))
+
+        # 否则返回旧数据
+        return shop_data
         
         
-            
+async def refresh_cache(id: int, db: AsyncSession, r: redis.Redis):
+    pass
 
 
 # 商铺详情
