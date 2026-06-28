@@ -35,7 +35,6 @@ async_session_maker = async_sessionmaker(
     class_=AsyncSession,    # 指定使用异步会话类, 异步必须设置这个
     expire_on_commit=False,  # 提交后不使对象过期,避免额外的查询，提升性能
     autoflush=False,        # 关闭自动 flush
-    autocommit=False,       # 关闭自动提交（必须显式 commit）
 )
 
 # 声明基类

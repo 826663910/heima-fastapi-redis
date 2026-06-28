@@ -22,8 +22,9 @@ async def lifespan(app: FastAPI):
         f"redis://{settings.redis_ip}:{settings.redis_port}/{settings.redis_db}", 
         password=f'{settings.redis_password}', 
         decode_responses=True, 
-        max_connections=100,       # 最大连接数
-        socket_timeout=3,          # 连接满载时, 等待可用连接的超时时间
+        max_connections=200,       # 最大连接数
+        socket_timeout=3,          # 收发数据（读/写）的超时时间
+        timeout=2,                 # 连接满载时, 等待可用连接的超时时间
         health_check_interval=30,  # 健康检查间隔
         socket_keepalive=True      # 是否开启SO_KEEPALIVE
         )

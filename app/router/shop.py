@@ -2,7 +2,7 @@ from fastapi import APIRouter, status, Depends, HTTPException
 from fastapi.encoders import jsonable_encoder  # 序列化
 from sqlalchemy.ext.asyncio import AsyncSession  # 异步注解
 from sqlalchemy import select   # SQL查询构造器
-from ..database import get_db, get_redis    # 获取异步数据库会话和redis客户端
+from ..database import get_db, get_redis, async_session_maker    # 获取异步数据库会话和redis客户端
 from .. import models, schemas  # 导入模型和模式
 import redis.asyncio as redis # 异步redis客户端
 from typing import Optional, Annotated, List
@@ -90,7 +90,11 @@ async def get_shop(id:int, db: Annotated[AsyncSession, '数据库会话', Depend
                     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="商铺不存在")
 
                 shop = jsonable_encoder(shop)   # 将orm对象, 转为py对象
-                cache_value = {'data': shop, 'expire_time': int(time.time() * 1000) + 300 * 1000}  # 缓存值, 包含数据和过期时间
+                # 缓存值, 包含数据和过期时间
+                cache_value = {
+                    'data': shop, 
+                    'expire_time': int(time.time() * 1000) + 300 * 1000
+                    }  
                 # 6. 存在id, 写入redis缓存中, 1小时+随机时间, 防止缓存雪崩, json.dumps序列化: 将py对象转为json对象
                 await r.setex(cache_key, 3600 + randint(0, 300), json.dumps(cache_value, ensure_ascii=False))
 
@@ -118,22 +122,61 @@ async def get_shop(id:int, db: Annotated[AsyncSession, '数据库会话', Depend
         
         # 3. 检查逻辑过期时间
         if expire_at > int(time.time() * 1000):
+            print('未过期')
             # 4. 未过期, 直接返回
             return shop_data
+        print('过期')
         # 5. 过期, 重建缓存, 2秒后自动删除, 防止死锁
         lock = await r.set(lock_key, '1', nx=True, ex=2)
 
         # 如果抢到了锁
         if lock:
             # 开启异步任务, 刷新缓存
-            asyncio.create_task(refresh_cache(id, db, r))
+            asyncio.create_task(refresh_cache(id, r))
 
         # 否则返回旧数据
         return shop_data
         
-        
-async def refresh_cache(id: int, db: AsyncSession, r: redis.Redis):
-    pass
+
+
+
+# 异步任务, 刷新缓存
+async def refresh_cache(id: int, r: redis.Redis):
+
+    cache_key = f"shop:detail:{id}"     # 缓存key
+
+    # 异步会话工厂
+    async with async_session_maker() as db:
+        try:
+            # 再次双重检查(Double Check), 防止重复查DB
+            shop = await r.get(cache_key)
+            if shop:
+                cache_data = json.loads(shop)  # 反序列化, 将json字符串, 转为py对象
+                # 如果距离上一次重建不到 1 秒，说明别的线程刚刷新过，跳过
+                if cache_data['expire_time'] > int(time.time() * 1000):
+                    return
+            
+            # 查询数据库
+            stmt = select(models.Shop).where(models.Shop.id == id)
+            result = await db.execute(stmt)
+            shop = result.scalar_one_or_none()  
+
+            # 如果数据存在
+            if shop:
+                shop_dict = jsonable_encoder(shop)   # 将orm对象, 转为py对象
+                # 重建缓存值, 包含数据和过期时间
+                cache_value = {
+                    'data': shop_dict, 
+                    'expire_time': int(time.time() * 1000) + 300 * 1000
+                    }  
+                # 写入redis缓存中, 1小时+随机时间, 防止缓存雪崩, json.dumps序列化: 将py对象转为json对象
+                await r.setex(cache_key, 3600 + randint(0, 300), json.dumps(cache_value, ensure_ascii=False))
+
+            else:
+                # 数据不存在，设置空缓存，防止缓存击穿
+                await r.setex(cache_key, 60, 'null')
+        except Exception as e:
+            print(f"异步缓存刷新失败: {e}")
 
 
 # 商铺详情
