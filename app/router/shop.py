@@ -9,6 +9,7 @@ from typing import Optional, Annotated, List
 import json # 用于序列化和反序列化
 from random import randint
 from redis.exceptions import LockError
+import time
 
 
 router = APIRouter(
@@ -49,8 +50,85 @@ async def get_shops(db: Annotated[AsyncSession, '数据库会话', Depends(get_d
     # 6. 返回商铺信息
     return shops
 
+
 # 商铺详情
-@router.get('/{id}', response_model=schemas.ShopDetailOut)
+# 分布式锁(逻辑过期+setnx/非阻塞)
+@router.get('/logic_expired/{id}', response_model=schemas.ShopDetailOut)
+async def get_shop(id:int, db: Annotated[AsyncSession, '数据库会话', Depends(get_db)], 
+                   r: Annotated[redis.Redis, 'redis客户端', Depends(get_redis)]):
+    cache_key = f"shop:detail:{id}"     # 缓存key
+    lock_key = f"lock:shop:detail:{id}"  # 重建锁key(逻辑过期, 非阻塞)
+    mutex_key = f"mutex:shop:detail:{id}"   # 冷启动阻塞锁(官方锁)
+
+    # 1. 从redis中查询商铺缓存
+    shop = await r.get(cache_key)
+    # 2. 判断缓存是否存在, 不存在, 冷启动(降级获取官方锁)
+    if not shop or shop == 'null':
+        print('未命中缓存, 冷启动(降级获取官方锁)')
+        try: 
+            # 4. 不存在缓存, 开始加锁 (官方锁), 异步上下文管理器, 自动释放锁
+            # timeout=5: 锁的自动过期时间（防止死锁）
+            # blocking_timeout=2: 最多等待 2 秒，超时抛出 LockError
+            async with r.lock(mutex_key, timeout=5, blocking_timeout=2):
+                # 4.3 Double Check, 双重检查, 防止缓存击穿
+                shop = await r.get(cache_key)
+                if shop:
+                    print('命中缓存')
+                    if shop == 'null':
+                        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="商铺不存在")
+                    shop = json.loads(shop)   # 反序列化, 将json字符串, 转为py对象
+                    return shop['data']
+
+                # 4.4 查询数据库（只有真正抢到锁的线程执行）
+                stmt = select(models.Shop).where(models.Shop.id == id)
+                result = await db.execute(stmt)
+                shop = result.scalar_one_or_none()
+
+                # 5. 查询数据库后, 如果不存在id, 将null写入缓存, 防止缓存穿透, 并且返回错误404
+                if shop is None:
+                    await r.setex(f"shop:detail:{id}", 60, 'null')
+                    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="商铺不存在")
+
+                shop = jsonable_encoder(shop)   # 将orm对象, 转为py对象
+                cache_value = {'data': shop, 'expire_time': int(time.time() * 1000) + 300 * 1000}  # 缓存值, 包含数据和过期时间
+                # 6. 存在id, 写入redis缓存中, 1小时+随机时间, 防止缓存雪崩, json.dumps序列化: 将py对象转为json对象
+                await r.setex(cache_key, 3600 + randint(0, 300), json.dumps(cache_value, ensure_ascii=False))
+
+                # 7. 返回商铺信息
+                return shop
+
+        # 处理锁超时：2 秒内没抢到锁，说明系统繁忙
+        except LockError:
+            raise HTTPException(status_code=503, detail="系统繁忙，请稍后再试")
+        
+        # 如果是 404 业务异常，直接原样抛出
+        except HTTPException as e:
+            raise e
+
+        # 兜底捕获其他异常（DB 超时等）    
+        except Exception as e:
+            print(f"系统异常: {e}")
+            raise HTTPException(status_code=500, detail="服务器错误")
+
+    else:
+        print('命中缓存， 检查逻辑过期')
+        cache_data = json.loads(shop)    # 反序列化, 将json字符串, 转为py对象
+        shop_data = cache_data['data']   # 获取缓存数据
+        expire_at = cache_data['expire_time']   # 获取过期时间
+        
+        # 3. 检查逻辑过期时间
+        if expire_at > int(time.time() * 1000):
+            # 4. 未过期, 直接返回
+            return shop_data
+        # 5. 过期, 重建缓存
+        
+        
+            
+
+
+# 商铺详情
+# 分布式锁(官方互斥锁/阻塞)
+@router.get('/mutex/{id}', response_model=schemas.ShopDetailOut)
 async def get_shop(id:int, db: Annotated[AsyncSession, '数据库会话', Depends(get_db)], 
                    r: Annotated[redis.Redis, 'redis客户端', Depends(get_redis)]):
     cache_key = f"shop:detail:{id}"     # 缓存key
