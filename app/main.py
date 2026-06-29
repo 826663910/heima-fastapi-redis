@@ -18,18 +18,19 @@ async def lifespan(app: FastAPI):
     await init_db()
 
     # 2. 初始化redis连接池, 异步环境
-    pool = redis.ConnectionPool.from_url(
+    pool = redis.BlockingConnectionPool.from_url(
         f"redis://{settings.redis_ip}:{settings.redis_port}/{settings.redis_db}", 
         password=f'{settings.redis_password}', 
         decode_responses=True, 
         max_connections=200,       # 最大连接数
         socket_timeout=3,          # 收发数据（读/写）的超时时间
-        timeout=2,                 # 连接满载时, 等待可用连接的超时时间
+        socket_connect_timeout=3,  # 建立 TCP 连接的超时
+        timeout=2,                 # 连接池, 连接满载时, 阻塞超时时间
         health_check_interval=30,  # 健康检查间隔
         socket_keepalive=True      # 是否开启SO_KEEPALIVE
         )
     
-    # 3. 创建异步redis客户端, 并测试连接
+    # 3. 创建异步redis客户端, 并测试连接,  
     app.state.redis = redis.Redis(connection_pool=pool)
     try:
         await app.state.redis.ping()

@@ -1,4 +1,5 @@
-from sqlalchemy import Column, String, Integer, Boolean, ForeignKey,Text, func, DECIMAL
+from sqlalchemy import Column, String, Integer, Boolean, ForeignKey,Text, func, DECIMAL, BigInteger
+from sqlalchemy.dialects.mysql import BIGINT, TINYINT    # mysql的类型, 
 from sqlalchemy.sql.sqltypes import TIMESTAMP   # 导入数据库类型中的日期时间
 from sqlalchemy.orm import relationship   # 导入关系映射
 from .database import Base # 模型基类
@@ -38,3 +39,16 @@ class Shop(Base):
     y = Column(DECIMAL(10, 7))  # 纬度
     created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())    # 创建时间
     updated_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())   # 更新时间
+
+class VoucherOrder(Base):
+    __tablename__ = "voucher_order"
+    id = Column(BigInteger, primary_key=True, autoincrement=False, nullable=False)   # 订单id
+    user_id = Column(BIGINT(unsigned=True), nullable=False)    # 下单的用户id, 无符号
+    voucher_id = Column(BIGINT(unsigned=True), nullable=False)  # 下单的券id, 无符号
+    pay_type = Column(TINYINT(unsigned=True), nullable=False, server_default='1')   # 支付方式, 1:余额支付, 2:支付宝支付, 3:微信支付
+    status = Column(TINYINT(unsigned=True), nullable=False, server_default='1')   # 订单状态, 1:未支付, 2:已支付, 3:已核销, 4:已取消, 5:退款中, 6:已退款, 7:已过期
+    created_time = Column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())    # 下单时间
+    pay_time = Column(TIMESTAMP(timezone=True), nullable=True)   # 支付时间
+    use_time = Column(TIMESTAMP(timezone=True), nullable=True)   # 核销时间
+    refund_time = Column(TIMESTAMP(timezone=True), nullable=True)   # 退款时间
+    updated_time = Column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())   # 更新时间
