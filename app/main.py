@@ -5,7 +5,7 @@ from .database import init_db, engine  # 初始化数据库, 获取session, 引�
 from .config import settings  # 配置文件
 # pip install starlette itsdangerous
 from starlette.middleware.sessions import SessionMiddleware  # 会话中间件
-from .router import users, shop  # 路由
+from .router import users, shop, order  # 路由
 # pip install redis
 import redis.asyncio as redis   # 异步redis
 import asyncio  # 异步io
@@ -38,14 +38,14 @@ async def lifespan(app: FastAPI):
         await app.state.redis.ping()
         print("异步Redis连接成功")
 
-        # 缓存预热
-        preload_count = min(300, pool.max_connections)  
-        if preload_count > 0:
-            print(f"开始预热 Redis 连接池 (预创建 {preload_count} 个连接)...")
-            # 并发执行 ping 命令，每个 ping 都会从池中借用一个连接，
-            # 命令执行完后连接自动归还到池中，但此时 TCP 连接已经建立好并保持活跃
-            await asyncio.gather(*[app.state.redis.ping() for _ in range(preload_count)])
-            print("Redis 连接池预热完成！")
+        # # 缓存预热
+        # preload_count = min(300, pool.max_connections)  
+        # if preload_count > 0:
+        #     print(f"开始预热 Redis 连接池 (预创建 {preload_count} 个连接)...")
+        #     # 并发执行 ping 命令，每个 ping 都会从池中借用一个连接，
+        #     # 命令执行完后连接自动归还到池中，但此时 TCP 连接已经建立好并保持活跃
+        #     await asyncio.gather(*[app.state.redis.ping() for _ in range(preload_count)])
+        #     print("Redis 连接池预热完成！")
 
     except Exception as e:
         print("异步Redis连接失败:", e)
@@ -82,4 +82,5 @@ app.add_middleware(SessionMiddleware, secret_key=settings.session_secret_key, ma
 # 给应用包含的路由对象
 app.include_router(users.router)
 app.include_router(shop.router)
+app.include_router(order.router)
 

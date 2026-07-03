@@ -40,6 +40,7 @@ class Shop(Base):
     created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())    # 创建时间
     updated_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())   # 更新时间
 
+# 优惠券订单
 class VoucherOrder(Base):
     __tablename__ = "voucher_order"
     id = Column(BigInteger, primary_key=True, autoincrement=False, nullable=False)   # 订单id
