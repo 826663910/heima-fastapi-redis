@@ -21,12 +21,12 @@ async def get_voucher(db: Annotated[AsyncSession, '数据库会话', Depends(get
 @router.get('/seckill', response_model=List[schemas.VoucherSeckillListOut])
 async def get_seckill(db: Annotated[AsyncSession, '数据库会话', Depends(get_db)]):
     # 查询秒杀券
-    stmt = (select(models.Voucher)
+    stmt = (select(models.Voucher, models.VoucherSeckill.stock, models.VoucherSeckill.start_time, models.VoucherSeckill.end_time)
             .join(models.VoucherSeckill, models.Voucher.id==models.VoucherSeckill.voucher_id)
             .where(models.Voucher.type==1)
             .order_by(models.Voucher.id))
     result = await db.execute(stmt) # 执行sql
-    vouchers = result.scalars().all()   # 返回所有
+    vouchers = result.mappings().all()   # 返回所有
     return vouchers # 返回秒杀券列表
 
 
