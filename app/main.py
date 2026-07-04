@@ -5,7 +5,7 @@ from .database import init_db, engine  # 初始化数据库, 获取session, 引�
 from .config import settings  # 配置文件
 # pip install starlette itsdangerous
 from starlette.middleware.sessions import SessionMiddleware  # 会话中间件
-from .router import users, shop, order  # 路由
+from .router import users, shop, order, voucher  # 路由
 # pip install redis
 import redis.asyncio as redis   # 异步redis
 import asyncio  # 异步io
@@ -80,7 +80,8 @@ app.add_middleware(
 app.add_middleware(SessionMiddleware, secret_key=settings.session_secret_key, max_age=2 * 60 * 60)
 
 # 给应用包含的路由对象
-app.include_router(users.router)
-app.include_router(shop.router)
-app.include_router(order.router)
+app.include_router(users.router)    # 用户
+app.include_router(shop.router)     # 店铺
+app.include_router(order.router)    # 订单
+app.include_router(voucher.router)  # 代金券
 

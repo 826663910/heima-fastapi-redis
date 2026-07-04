@@ -137,9 +137,7 @@ async def get_shop(id:int, db: Annotated[AsyncSession, '数据库会话', Depend
         # 否则返回旧数据
         return shop_data
         
-
-
-
+        
 # 异步任务, 刷新缓存
 async def refresh_cache(id: int, r: redis.Redis):
 

@@ -1,5 +1,6 @@
 from pydantic import BaseModel
 from typing import Optional
+from datetime import datetime
 
 # 验证用户信息
 class UserInfo(BaseModel):
@@ -46,3 +47,17 @@ class ShopUpdate(BaseModel):
     images: Optional[str] = None
     x: Optional[float] = None
     y: Optional[float] = None
+
+class VoucherListOut(BaseModel):
+    id: int
+    title: str
+    sub_title: str
+    pay_value: int
+    actual_value: int
+    status: int
+
+class VoucherSeckillListOut(VoucherListOut):
+    stock: int
+    start_time: datetime
+    end_time: datetime
+    
