@@ -19,6 +19,7 @@ class UserOut(BaseModel):
     nick_name: str
 
 
+# 商铺
 class ShopListOut(BaseModel):
     id: int
     name: str
@@ -48,8 +49,11 @@ class ShopUpdate(BaseModel):
     x: Optional[float] = None
     y: Optional[float] = None
 
+
+# 优惠券列表
 class VoucherListOut(BaseModel):
     id: int
+    shop_id: Optional[int] = None
     title: str
     sub_title: str
     pay_value: int
@@ -60,4 +64,20 @@ class VoucherSeckillListOut(VoucherListOut):
     stock: int
     start_time: datetime
     end_time: datetime
-    
+
+
+# 创建优惠券
+class VoucherPost(BaseModel):
+    shop_id : Optional[int] = None
+    title: str
+    sub_title: str
+    pay_value: int
+    actual_value: int
+    type: int
+    status: int
+
+
+class VoucherSeckillPost(VoucherPost):
+    stock: int
+    start_time: datetime
+    end_time: datetime

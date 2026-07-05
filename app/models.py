@@ -58,8 +58,8 @@ class VoucherOrder(Base):
 # 普通优惠券
 class Voucher(Base):
     __tablename__ = "voucher"
-    id = Column(BigInteger(unsigned=True), primary_key=True, nullable=False)    # 主键
-    shop_id = Column(BIGINT(unsigned=True), server_default='NULL')  # 商铺id, 无符号
+    id = Column(BIGINT(unsigned=True), primary_key=True, nullable=False)    # 主键
+    shop_id = Column(BIGINT(unsigned=True), server_default=None)  # 商铺id, 无符号
     title = Column(String(255), nullable=False) # 代金券标题
     sub_title = Column(String(255), nullable=False) # 代金券副标题
     pay_value = Column(BIGINT(unsigned=True), nullable=False)  # 支付金额, 单位是分, 例如200代表2元
@@ -73,7 +73,7 @@ class Voucher(Base):
 # 秒杀优惠券
 class VoucherSeckill(Base):
     __tablename__ = "voucher_seckill"
-    id = Column(BigInteger(unsigned=True), primary_key=True, nullable=False)    # 主键
+    id = Column(BIGINT(unsigned=True), primary_key=True, nullable=False)    # 主键
     voucher_id = Column(BIGINT(unsigned=True), nullable=False)  # 关联的优惠券id, 无符号
     stock = Column(BIGINT(unsigned=True), nullable=False)  # 秒杀库存
     start_time = Column(TIMESTAMP(timezone=True), nullable=False)   # 秒杀开始时间
