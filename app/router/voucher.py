@@ -16,7 +16,6 @@ async def get_voucher(db: Annotated[AsyncSession, '数据库会话', Depends(get
     # 查询平价券
     stmt = (select(models.Voucher)
             .where(models.Voucher.type==0)
-            .where(models.Voucher.shop_id)
             .order_by(models.Voucher.id))
     result = await db.execute(stmt) # 执行sql
     vouchers = result.scalars().all()   # 返回所有
@@ -47,27 +46,27 @@ async def get_seckill(shop_id: int, db: Annotated[AsyncSession, '数据库会话
 async def create_seckill(post: schemas.VoucherSeckillPost, 
                            db: Annotated[AsyncSession, '数据库会话', Depends(get_db)]):
     
-    # 剔除秒杀券的字段
-    base_post = post.model_dump(exclude={'stock', 'start_time', 'end_time'})
-    voucher = models.Voucher(**base_post)   # 将post转为orm对象
-    db.add(voucher)  # 添加到数据库
+    # 开启事务块，退出时自动 commit，异常时自动 rollback
+    async with db.begin():
+        # 剔除秒杀券的字段
+        base_post = post.model_dump(exclude={'stock', 'start_time', 'end_time'})
+        voucher = models.Voucher(**base_post)   # 将post转为orm对象
+        db.add(voucher)  # 添加到数据库
 
-    # 如果为1, 则添加秒杀券数据
-    if post.type ==1:
-        await db.flush()    # 刷新数据库(提交前, 获取voucher_id)
-        # 构造秒杀券数据
-        seckill_data = {
-            'voucher_id': voucher.id,
-            'stock': post.stock,
-            'start_time': post.start_time,
-            'end_time': post.end_time
-        }
-        # 添加秒杀券数据
-        seckill = models.VoucherSeckill(**seckill_data)
-        db.add(seckill)
-    
-    # 否则, 为普通券
-    await db.commit()       # 提交事务
+        # 如果为1, 则添加秒杀券数据, 否则不添加
+        if post.type ==1:
+            await db.flush()    # 刷新数据库(提交前, 获取voucher_id)
+            # 构造秒杀券数据
+            seckill_data = {
+                'voucher_id': voucher.id,
+                'stock': post.stock,
+                'start_time': post.start_time,
+                'end_time': post.end_time
+            }
+            # 添加秒杀券数据
+            seckill = models.VoucherSeckill(**seckill_data)
+            db.add(seckill)
+
     await db.refresh(voucher)   # 刷新orm对象
     return voucher  # 返回优惠卷
 

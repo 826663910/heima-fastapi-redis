@@ -70,7 +70,7 @@ class Voucher(Base):
     updated_time = Column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())   # 更新时间
 
 
-# 秒杀优惠券
+# 秒杀优惠券, 和普通券是一对一关系
 class VoucherSeckill(Base):
     __tablename__ = "voucher_seckill"
     id = Column(BIGINT(unsigned=True), primary_key=True, nullable=False)    # 主键

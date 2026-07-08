@@ -50,6 +50,21 @@ class ShopUpdate(BaseModel):
     y: Optional[float] = None
 
 
+# 优惠券订单创建
+class VoucherOrderCreate(BaseModel):
+    id: int
+    user_id: int
+    voucher_id: int
+    pay_type: Optional[int] = None
+    status: Optional[int] = None
+    pay_time: Optional[datetime] = None
+    use_time: Optional[datetime] = None
+    refund_time: Optional[datetime] = None
+    pay_time: Optional[datetime] = None
+    use_time: Optional[datetime] = None
+    refund_time: Optional[datetime] = None
+
+
 # 优惠券列表
 class VoucherListOut(BaseModel):
     id: int
