@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from typing import Annotated, List    # 注解
 from sqlalchemy.ext.asyncio import AsyncSession # 异步注解
-from sqlalchemy import select   # SQL查询构造器
+from sqlalchemy import select, update   # SQL查询构造器
 from sqlalchemy import or_  # 或
 from ..database import get_db, get_redis    # 获取异步数据库会话和redis客户端
 from .. import models, schemas  # 导入模型和模式
@@ -70,5 +70,25 @@ async def create_seckill(post: schemas.VoucherSeckillPost,
     await db.refresh(voucher)   # 刷新orm对象
     return voucher  # 返回优惠卷
 
+
+@router.patch('/{voucher_id}', response_model=schemas.VoucherOut)
+async def patch_voucher(voucher_id: int, patch: schemas.VoucherPatch,
+                        db: Annotated[AsyncSession, '数据库会话', Depends(get_db)]):
+    # 开启事务块, 退出时自动 commit, 异常时自动 rollback
+    async with db.begin():
+        # 更新优惠券
+        result = await db.execute(update(models.Voucher)          # 更新语句
+               .where(models.Voucher.id == voucher_id)             # 筛选
+               .values(**patch.model_dump(exclude_unset=True))     # 更新字段
+        )
+        # 如果影响行数为0, 报错404
+        if result.rowcount == 0:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="优惠券不存在")
+        
+    # 按主键查询(第二个参数必须是主键值)
+    voucher = await db.get(models.Voucher, voucher_id)
+    
+    # 存在, 返回优惠券(在当前事务内, 没提交前可以查询到修改后的数据)
+    return voucher
 
 

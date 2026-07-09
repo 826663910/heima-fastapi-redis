@@ -81,3 +81,13 @@ class VoucherSeckillPost(VoucherPost):
     stock: int
     start_time: datetime
     end_time: datetime
+
+class VoucherPatch(BaseModel):
+    title: Optional[str] = None
+    sub_title: Optional[str] = None
+    status: Optional[int] = None
+
+class VoucherOut(BaseModel):
+    title: str
+    sub_title: str
+    status: int

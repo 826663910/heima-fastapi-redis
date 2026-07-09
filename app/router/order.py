@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status  # 路由和依赖
 from fastapi.encoders import jsonable_encoder  # 序列化
-from sqlalchemy import select   # SQL查询构造器
+from sqlalchemy import select, update   # SQL查询构造器
 from sqlalchemy.ext.asyncio import AsyncSession # 异步注解
 from datetime import datetime, timezone 
 from redis.asyncio import Redis # 异步redis
@@ -77,13 +77,12 @@ async def seckill(voucher_id: int, user_id: int,
         
         # 5. 扣减库存
         # 执行sql语句
-        result = await db.execute(models.VoucherSeckill.__table__       # 1. 要更新的表对象
-                        .update()                                      # 2. 更新语句
-                        .where(models.VoucherSeckill.voucher_id==voucher_id,   # 3. 条件, 秒杀券id=传入的id
-                                models.VoucherSeckill.stock > 0)                # 4. 乐观锁, 库存必须大于0 
-                        .values(stock=models.VoucherSeckill.stock - 1 ))       # 4. 更新字段
+        result = await db.execute(update(models.VoucherSeckill)                          # 1. 更新语句
+                                  .where(models.VoucherSeckill.voucher_id==voucher_id,   # 2. 条件, 秒杀券id=传入的id
+                                         models.VoucherSeckill.stock > 0)                # 3. 乐观锁, 库存必须大于0 
+                                  .values(stock=models.VoucherSeckill.stock - 1 ))       # 4. 更新字段
         
-        # 如果没有更新, 则说明库存不足
+        # 如果影响行数为0, 则说明库存不足
         if result.rowcount == 0:
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="库存不足")
 
