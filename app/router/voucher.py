@@ -11,6 +11,7 @@ router = APIRouter(
     tags=["VOUCHER"]
 )
 
+# 查询评价券列表
 @router.get('/', response_model=List[schemas.VoucherListOut])
 async def get_voucher(db: Annotated[AsyncSession, '数据库会话', Depends(get_db)]):
     # 查询平价券
@@ -21,6 +22,7 @@ async def get_voucher(db: Annotated[AsyncSession, '数据库会话', Depends(get
     vouchers = result.scalars().all()   # 返回所有
     return vouchers # 返回平价券列表
 
+# 查询秒杀券列表
 @router.get('/shop/{shop_id}/seckill', response_model=List[schemas.VoucherSeckillListOut])
 async def get_seckill(shop_id: int, db: Annotated[AsyncSession, '数据库会话', Depends(get_db)]):
     # 查询秒杀券
@@ -42,6 +44,7 @@ async def get_seckill(shop_id: int, db: Annotated[AsyncSession, '数据库会话
     vouchers = result.mappings().all()   # 返回所有
     return vouchers # 返回秒杀券列表
 
+# 创建评价券或秒杀券
 @router.post('/')
 async def create_seckill(post: schemas.VoucherSeckillPost, 
                            db: Annotated[AsyncSession, '数据库会话', Depends(get_db)]):
@@ -71,6 +74,7 @@ async def create_seckill(post: schemas.VoucherSeckillPost,
     return voucher  # 返回优惠卷
 
 
+# 修改平价券或优惠券
 @router.patch('/{voucher_id}', response_model=schemas.VoucherOut)
 async def patch_voucher(voucher_id: int, patch: schemas.VoucherPatch,
                         db: Annotated[AsyncSession, '数据库会话', Depends(get_db)]):

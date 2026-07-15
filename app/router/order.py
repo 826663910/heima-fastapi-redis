@@ -29,6 +29,7 @@ async def globally_unique_id(r: Redis, prefix: str='order') -> int:
     uid = (current_time << 32) | count  # 左移32位, 右对齐
     return uid
 
+# 下秒杀券订单
 @router.post('/seckill/{voucher_id}')
 async def seckill(voucher_id: int, user_id: int,  
                   db: Annotated[AsyncSession, '数据库会话', Depends(get_db)],
