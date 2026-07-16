@@ -125,3 +125,9 @@ async def userinfo(request: Request,
     if user == None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="用户不存在")
     return user
+
+"""退出登录"""
+@router.post('/logout')
+async def logout(request: Request):
+    request.session.pop('user', None)
+    return {"msg": "退出成功"}

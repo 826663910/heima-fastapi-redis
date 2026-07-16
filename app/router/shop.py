@@ -3,7 +3,7 @@ from fastapi.encoders import jsonable_encoder  # 序列化
 from sqlalchemy.ext.asyncio import AsyncSession  # 异步注解
 from sqlalchemy import select   # SQL查询构造器
 from ..database import get_db, get_redis, async_session_maker    # 获取异步数据库会话和redis客户端
-from .. import models, schemas  # 导入模型和模式
+from .. import models, schemas, auth  # 导入模型和模式
 import redis.asyncio as redis # 异步redis客户端
 from typing import Optional, Annotated, List
 import json # 用于序列化和反序列化
@@ -21,6 +21,7 @@ router = APIRouter(
 @router.get("/", response_model=List[schemas.ShopListOut])
 async def get_shops(db: Annotated[AsyncSession, '数据库会话', Depends(get_db)],
                     r: Annotated[redis.Redis, 'redis客户端', Depends(get_redis)],
+                    current_user: Annotated[dict, '当前用户', Depends(auth.check_login)],
                     category_name: Optional[str]=None, limit: int=10, skip: int=0):
     # 1. 从redis中查询商铺缓存
     shops = await r.get(f"shop:list:cat_{category_name or 'all'}:{limit}:{skip}")
@@ -55,7 +56,8 @@ async def get_shops(db: Annotated[AsyncSession, '数据库会话', Depends(get_d
 # 分布式锁(逻辑过期+setnx/非阻塞)
 @router.get('/logic_expired/{id}', response_model=schemas.ShopDetailOut)
 async def get_shop(id:int, db: Annotated[AsyncSession, '数据库会话', Depends(get_db)], 
-                   r: Annotated[redis.Redis, 'redis客户端', Depends(get_redis)]):
+                   r: Annotated[redis.Redis, 'redis客户端', Depends(get_redis)],
+                   current_user: Annotated[dict, '当前用户', Depends(auth.check_login)]):
     cache_key = f"shop:detail:{id}"     # 缓存key
     lock_key = f"lock:shop:detail:{id}"  # 重建锁key(逻辑过期, 非阻塞)
     mutex_key = f"mutex:shop:detail:{id}"   # 冷启动阻塞锁(官方锁)
@@ -181,7 +183,8 @@ async def refresh_cache(id: int, r: redis.Redis):
 # 分布式锁(官方互斥锁/阻塞)
 @router.get('/mutex/{id}', response_model=schemas.ShopDetailOut)
 async def get_shop(id:int, db: Annotated[AsyncSession, '数据库会话', Depends(get_db)], 
-                   r: Annotated[redis.Redis, 'redis客户端', Depends(get_redis)]):
+                   r: Annotated[redis.Redis, 'redis客户端', Depends(get_redis)],
+                   current_user: Annotated[dict, '当前用户', Depends(auth.check_login)]):
     cache_key = f"shop:detail:{id}"     # 缓存key
     lock_key = f"lock:shop:detail:{id}"  # 互斥锁key
 
@@ -247,7 +250,8 @@ async def get_shop(id:int, db: Annotated[AsyncSession, '数据库会话', Depend
 @router.patch('/{id}')
 async def update_shop(id:int, shop_data: schemas.ShopUpdate,
                       db: Annotated[AsyncSession, '数据库会话', Depends(get_db)],
-                      r: Annotated[redis.Redis, 'redis客户端', Depends(get_redis)]):
+                      r: Annotated[redis.Redis, 'redis客户端', Depends(get_redis)],
+                      current_user: Annotated[dict, '当前用户', Depends(auth.check_login)],):
     # 1. 查询店铺id是否存在, 
     stmt = select(models.Shop).where(models.Shop.id==id)
     result = await db.execute(stmt)

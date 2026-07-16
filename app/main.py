@@ -77,7 +77,7 @@ app.add_middleware(
 """给应用添加session中间件"""
 # 给应用添加session中间件,使用这个中间件后, 接口就能用request.session保存和获取session了
 # SessionMiddleware 必须在 CORS 之前添加
-app.add_middleware(SessionMiddleware, secret_key=settings.session_secret_key, max_age=2 * 60 * 60)
+app.add_middleware(SessionMiddleware, secret_key=settings.session_secret_key, max_age=30 * 24 * 60 * 60)
 
 # 给应用包含的路由对象
 app.include_router(users.router)    # 用户

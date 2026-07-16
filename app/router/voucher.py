@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession # 异步注解
 from sqlalchemy import select, update   # SQL查询构造器
 from sqlalchemy import or_  # 或
 from ..database import get_db, get_redis    # 获取异步数据库会话和redis客户端
-from .. import models, schemas  # 导入模型和模式
+from .. import models, schemas, auth  # 导入模型、模式和认证
 
 router = APIRouter(
     prefix="/voucher",
@@ -24,7 +24,8 @@ async def get_voucher(db: Annotated[AsyncSession, '数据库会话', Depends(get
 
 # 查询秒杀券列表
 @router.get('/shop/{shop_id}/seckill', response_model=List[schemas.VoucherSeckillListOut])
-async def get_seckill(shop_id: int, db: Annotated[AsyncSession, '数据库会话', Depends(get_db)]):
+async def get_seckill(shop_id: int, db: Annotated[AsyncSession, '数据库会话', Depends(get_db)],
+                      current_user: Annotated[dict, '当前用户', Depends(auth.check_login)]):
     # 查询秒杀券
     stmt = (select(models.Voucher.id,               # 显式列出
                    models.Voucher.shop_id,
@@ -47,7 +48,8 @@ async def get_seckill(shop_id: int, db: Annotated[AsyncSession, '数据库会话
 # 创建评价券或秒杀券
 @router.post('/')
 async def create_seckill(post: schemas.VoucherSeckillPost, 
-                           db: Annotated[AsyncSession, '数据库会话', Depends(get_db)]):
+                           db: Annotated[AsyncSession, '数据库会话', Depends(get_db)],
+                           current_user: Annotated[dict, '当前用户', Depends(auth.check_login)]):
     
     # 开启事务块，退出时自动 commit，异常时自动 rollback
     async with db.begin():
@@ -77,7 +79,8 @@ async def create_seckill(post: schemas.VoucherSeckillPost,
 # 修改平价券或优惠券
 @router.patch('/{voucher_id}', response_model=schemas.VoucherOut)
 async def patch_voucher(voucher_id: int, patch: schemas.VoucherPatch,
-                        db: Annotated[AsyncSession, '数据库会话', Depends(get_db)]):
+                        db: Annotated[AsyncSession, '数据库会话', Depends(get_db)],
+                        current_user: Annotated[dict, '当前用户', Depends(auth.check_login)]):
     # 开启事务块, 退出时自动 commit, 异常时自动 rollback
     async with db.begin():
         # 更新优惠券
