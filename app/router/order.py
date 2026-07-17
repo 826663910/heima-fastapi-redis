@@ -34,48 +34,44 @@ async def globally_unique_id(r: Redis, prefix: str='order') -> int:
 async def seckill(voucher_id: int,  
                   db: Annotated[AsyncSession, '数据库会话', Depends(get_db)],
                   r: Annotated[Redis, 'redis客户端', Depends(get_redis)],
-                  ):
+                  current_user: Annotated[dict, '当前用户', Depends(auth.check_login)]):
     
-    # 1. 查询优惠券
-    stmt = (select(models.Voucher.id,               # 显式列出
-                models.Voucher.shop_id,
-                models.Voucher.title,
-                models.Voucher.sub_title,
-                models.Voucher.pay_value,
-                models.Voucher.actual_value,
-                models.Voucher.status, 
-                models.VoucherSeckill.stock, 
-                models.VoucherSeckill.start_time, 
-                models.VoucherSeckill.end_time)
-            .join(models.VoucherSeckill, models.Voucher.id == models.VoucherSeckill.voucher_id)
-            .where(models.Voucher.type==1, models.Voucher.id == voucher_id))
-    result = await db.execute(stmt)  # 执行sql
-    seckill = result.mappings().first()   # RowMapping 对象
-    await db.commit()
-
-    # 如果不存在, 则抛出异常
-    if not seckill:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="优惠券不存在")
-
-    # 获取utc时间, （Aware, 有时区）
-    now = datetime.now(timezone.utc)
-    # 2. 判断秒杀是否开始
-    if seckill['start_time'].replace(tzinfo=timezone.utc) > now:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="秒杀尚未开始")
-
-    # 3. 判断秒杀是否结束
-    if seckill['end_time'].replace(tzinfo=timezone.utc) < now:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="秒杀已结束")
-
-    # 4. 判断库存是否充足
-    if seckill['stock'] <= 0:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="库存不足")
-    
-    uid = await globally_unique_id(r, 'order')
-    user_id = 2
-
-    """ 开启扣减库存的事务块, 退出时自动 commit, 异常时自动 rollback """
+    """ 开启事务块, 退出时自动 commit, 异常时自动 rollback """
     async with db.begin():        
+        # 1. 查询优惠券
+        stmt = (select(models.Voucher.id,               # 显式列出
+                    models.Voucher.shop_id,
+                    models.Voucher.title,
+                    models.Voucher.sub_title,
+                    models.Voucher.pay_value,
+                    models.Voucher.actual_value,
+                    models.Voucher.status, 
+                    models.VoucherSeckill.stock, 
+                    models.VoucherSeckill.start_time, 
+                    models.VoucherSeckill.end_time)
+                .join(models.VoucherSeckill, models.Voucher.id == models.VoucherSeckill.voucher_id)
+                .where(models.Voucher.type==1, models.Voucher.id == voucher_id))
+        result = await db.execute(stmt)  # 执行sql
+        seckill = result.mappings().first()   # RowMapping 对象
+
+        # 如果不存在, 则抛出异常
+        if not seckill:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="优惠券不存在")
+
+        # 获取utc时间, （Aware, 有时区）
+        now = datetime.now(timezone.utc)
+        # 2. 判断秒杀是否开始
+        if seckill['start_time'].replace(tzinfo=timezone.utc) > now:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="秒杀尚未开始")
+
+        # 3. 判断秒杀是否结束
+        if seckill['end_time'].replace(tzinfo=timezone.utc) < now:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="秒杀已结束")
+
+        # 4. 判断库存是否充足
+        if seckill['stock'] <= 0:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="库存不足")
+    
         # 5. 扣减库存
         # 执行sql语句
         result = await db.execute(update(models.VoucherSeckill)                          # 1. 更新语句
@@ -87,28 +83,15 @@ async def seckill(voucher_id: int,
         if result.rowcount == 0:
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="库存不足")
 
-    """开启生成订单的事务块, 如果因外部异常, 必须要回滚库存兜底"""
-    try:
-        async with db.begin():
-            # 6. 生成订单
-            # 6.1. 订单id
-            uid = uid
-            # 6.2. 用户id
-            user_id = user_id
-            # 6.2. 代金券id
-            v_id = voucher_id
-            voucher_order = models.VoucherOrder(id=uid, user_id=user_id, voucher_id=v_id)
-            db.add(voucher_order)   # 添加进数据库
+        # 6. 生成订单
+        # 6.1. 订单id
+        uid = await globally_unique_id(r, 'order')
+        # 6.2. 用户id
+        user_id = current_user['id']
+        # 6.3. 代金券id
+        v_id = voucher_id
+        voucher_order = models.VoucherOrder(id=uid, user_id=user_id, voucher_id=v_id)
+        db.add(voucher_order)   # 添加进数据库
 
-        # 7. 返回订单id
-        return {'order_id': uid, 'msg': '秒杀成功'}
-    
-    except Exception as e:
-        async with db.begin():
-            await db.execute(update(models.VoucherSeckill)
-                              .where(models.VoucherSeckill.voucher_id==voucher_id)
-                              .values(stock=models.VoucherSeckill.stock + 1))
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"生成订单失败: {str(e)}, 已回滚库存")
-
-    
-    
+    # 7. 返回订单id
+    return {'order_id': uid, 'msg': '秒杀成功'}
