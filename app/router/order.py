@@ -34,6 +34,7 @@ async def globally_unique_id(r: Redis, prefix: str='order') -> int:
 async def seckill(voucher_id: int,  
                   db: Annotated[AsyncSession, '数据库会话', Depends(get_db)],
                   r: Annotated[Redis, 'redis客户端', Depends(get_redis)],
+                  current_user: Annotated[dict, '当前用户', Depends(auth.check_login)]
                   ):
     
     # 1. 查询优惠券
@@ -77,7 +78,7 @@ async def seckill(voucher_id: int,
         # 4.1 根据优惠券id和用户id查询是否存在订单
         stmt = (select(func.count(models.VoucherOrder.id))      # 用内置函数计数订单数量
                 .where(models.VoucherOrder.voucher_id == voucher_id, 
-                       models.VoucherOrder.user_id == 2))
+                       models.VoucherOrder.user_id == current_user['id']))
         is_order = await db.execute(stmt)
         count = is_order.scalar()   # 获取结果数量
         if count > 0:   # 如果数量大于0, 则说明存在订单
@@ -98,7 +99,7 @@ async def seckill(voucher_id: int,
         # 6.1. 订单id
         uid = await globally_unique_id(r, 'order')
         # 6.2. 用户id
-        user_id = 2
+        user_id = current_user['id']
         # 6.3. 代金券id
         v_id = voucher_id
         voucher_order = models.VoucherOrder(id=uid, user_id=user_id, voucher_id=v_id)

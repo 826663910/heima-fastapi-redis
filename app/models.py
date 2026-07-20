@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Integer, Boolean, ForeignKey,Text, func, DECIMAL, BigInteger
+from sqlalchemy import Column, String, Integer, Boolean, ForeignKey,Text, func, DECIMAL, BigInteger, UniqueConstraint
 from sqlalchemy.dialects.mysql import BIGINT, TINYINT    # mysql的类型, 
 from sqlalchemy.sql.sqltypes import TIMESTAMP   # 导入数据库类型中的日期时间
 from sqlalchemy.orm import relationship   # 导入关系映射
@@ -53,6 +53,10 @@ class VoucherOrder(Base):
     use_time = Column(TIMESTAMP(timezone=True), nullable=True)   # 核销时间
     refund_time = Column(TIMESTAMP(timezone=True), nullable=True)   # 退款时间
     updated_time = Column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())   # 更新时间
+    # 表参数
+    __table_args__ = (
+        UniqueConstraint('user_id', 'voucher_id', name='unique_user_voucher'),   #  联合唯一索引, 必须是元祖
+    )
 
 
 # 普通优惠券
