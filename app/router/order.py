@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status  # 路由和依赖
 from fastapi.encoders import jsonable_encoder  # 序列化
 from sqlalchemy import select, update, func   # 查询和更新和内置函数
 from sqlalchemy.ext.asyncio import AsyncSession # 异步注解
+from sqlalchemy.exc import IntegrityError  # 唯一约束错误
 from datetime import datetime, timezone 
 from redis.asyncio import Redis # 异步redis
 from typing import Annotated    # 注解
@@ -34,7 +35,7 @@ async def globally_unique_id(r: Redis, prefix: str='order') -> int:
 async def seckill(voucher_id: int,  
                   db: Annotated[AsyncSession, '数据库会话', Depends(get_db)],
                   r: Annotated[Redis, 'redis客户端', Depends(get_redis)],
-                  current_user: Annotated[dict, '当前用户', Depends(auth.check_login)]
+                  
                   ):
     
     # 1. 查询优惠券
@@ -75,15 +76,6 @@ async def seckill(voucher_id: int,
     """ 开启事务块, 退出时自动 commit, 异常时自动 rollback """
     async with db.begin():  
 
-        # 4.1 根据优惠券id和用户id查询是否存在订单
-        stmt = (select(func.count(models.VoucherOrder.id))      # 用内置函数计数订单数量
-                .where(models.VoucherOrder.voucher_id == voucher_id, 
-                       models.VoucherOrder.user_id == current_user['id']))
-        is_order = await db.execute(stmt)
-        count = is_order.scalar()   # 获取结果数量
-        if count > 0:   # 如果数量大于0, 则说明存在订单
-            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="订单已存在")
-
         # 5. 扣减库存
         # 执行sql语句
         stock = await db.execute(update(models.VoucherSeckill)                          # 1. 更新语句
@@ -94,16 +86,21 @@ async def seckill(voucher_id: int,
         # 如果影响行数为0, 则说明库存不足
         if stock.rowcount == 0:
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="库存不足")
-
-        # 6. 生成订单
-        # 6.1. 订单id
-        uid = await globally_unique_id(r, 'order')
-        # 6.2. 用户id
-        user_id = current_user['id']
-        # 6.3. 代金券id
-        v_id = voucher_id
-        voucher_order = models.VoucherOrder(id=uid, user_id=user_id, voucher_id=v_id)
-        db.add(voucher_order)   # 添加进数据库
+        
+        try: 
+            # 6. 生成订单
+            # 6.1. 订单id
+            uid = await globally_unique_id(r, 'order')
+            # 6.2. 用户id
+            user_id = 2
+            # 6.3. 代金券id
+            v_id = voucher_id
+            voucher_order = models.VoucherOrder(id=uid, user_id=user_id, voucher_id=v_id)
+            db.add(voucher_order)   # 添加进数据库
+            await db.commit()   # 手动提交
+        
+        except IntegrityError:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="您已抢过该券，不可重复下单")
 
     # 7. 返回订单id
     return {'order_id': uid, 'msg': '秒杀成功'}
