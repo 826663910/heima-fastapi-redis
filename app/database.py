@@ -24,8 +24,8 @@ SET GLOBAL max_connections = 500;
 engine = create_async_engine(
     DATABASE_URL,
     echo=False,  # 打印 SQL 语句，生产环境设为 False
-    pool_size=500,   # 连接池常驻连接数
-    max_overflow=300,    # 额外临时连接数
+    pool_size=50,   # 连接池常驻连接数
+    max_overflow=30,    # 额外临时连接数
     pool_pre_ping=True,  # 连接池预ping检查
     pool_recycle=3600,   # 连接池回收时间（秒）
 )
