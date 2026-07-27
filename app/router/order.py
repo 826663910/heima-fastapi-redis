@@ -9,6 +9,7 @@ from typing import Annotated    # 注解
 from ..database import get_redis, get_db    # 获取redis客户端
 from .. import models, schemas, auth  # 导入模型和模式和验证
 import time 
+import uuid
 
 # 路由
 router = APIRouter(
@@ -75,7 +76,8 @@ async def seckill(voucher_id: int,
 
     # 4.1 一人一单, 获取锁
     key_lock = f'lock_prefix:order:{voucher_id}:{current_user['id']}'
-    lock = await r.set(key_lock, 1, ex=10, nx=True)   # 设置分布式锁
+    request_id = str(uuid.uuid4())
+    lock = await r.set(key_lock, request_id, ex=10, nx=True)   # 设置分布式锁
     # 如果锁不存在, 则说明已经抢过该券, 不可重复下单
     if lock is None:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="您已抢过该券，不可重复下单!")
@@ -113,6 +115,7 @@ async def seckill(voucher_id: int,
 
     # 不管是否有异常，都删除分布式锁
     finally:
-        await r.delete(key_lock)
+        if request_id == await r.get(key_lock):
+            await r.delete(key_lock)
 
     
