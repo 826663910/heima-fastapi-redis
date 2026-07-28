@@ -25,7 +25,7 @@ async def globally_unique_id(r: Redis, prefix: str='order') -> int:
     # 2. 生成序列号
     # 2.1 获取当天日期, 精确到天
     today = datetime.now(timezone.utc).strftime('%Y%m%d')
-    # 2.2 自增长
+    # 2.2 自增长, 每次加1
     count = await r.incr(f"icr:{prefix}:{today}")
     # 3. 拼接字符串并返回, int类型
     uid = (current_time << 32) | count  # 左移32位, 右对齐
@@ -54,7 +54,7 @@ async def seckill(voucher_id: int,
             .where(models.Voucher.type==1, models.Voucher.id == voucher_id))
     result = await db.execute(stmt)  # 执行sql
     seckill = result.mappings().first()   # RowMapping 对象
-    await db.commit()
+    await db.commit()   # 当一个业务中, 有数据库操作又有事务块时, 需要手动显示提交
 
     # 如果不存在, 则抛出异常
     if not seckill:
@@ -75,12 +75,12 @@ async def seckill(voucher_id: int,
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="库存不足")
 
     # 4.1 一人一单, 获取锁
-    key_lock = f'lock_prefix:order:{voucher_id}:{current_user['id']}'
-    request_id = str(uuid.uuid4())
-    lock = await r.set(key_lock, request_id, ex=10, nx=True)   # 设置分布式锁
-    # 如果锁不存在, 则说明已经抢过该券, 不可重复下单
+    key_lock = f'lock_prefix:order:{voucher_id}:{current_user["id"]}'   # 构造锁键
+    value_lock = str(uuid.uuid4())  # 把uuid作为值, 存入redis
+    lock = await r.set(key_lock, value_lock, ex=5, nx=True)   # 设置分布式锁
+    # 如果锁不存在, 则报错422
     if lock is None:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="您已抢过该券，不可重复下单!")
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="请勿重复点击!")
     # 存在, 则说明抢到该券, 可以下单
     try: 
         """ 开启事务块, 退出时自动 commit, 异常时自动 rollback """
@@ -94,7 +94,7 @@ async def seckill(voucher_id: int,
 
             # 如果影响行数为0, 则说明库存不足
             if stock.rowcount == 0:
-                raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="库存不足")
+                raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="库存不足!")
             
             # 6. 生成订单
             # 6.1. 订单id
@@ -109,13 +109,22 @@ async def seckill(voucher_id: int,
         # 7. 返回订单id
         return {'order_id': uid, 'msg': '秒杀成功'}
 
-    # 处理数据库完整性错误        
+    # 处理数据库完整性错误(约束报错)        
     except IntegrityError:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="您已抢过该券，不可重复下单!!")
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="您已抢过该券，不可重复下单!")
 
     # 不管是否有异常，都删除分布式锁
     finally:
-        if request_id == await r.get(key_lock):
-            await r.delete(key_lock)
+        # 构造Lua脚本, 判断锁的值和uuid是否一致, 一致则删除, 否则不删除
+        string = """
+            if redis.call('get', KEYS[1]) == ARGV[1] then
+                return redis.call('del', KEYS[1])
+            else
+                return 0
+            end
+        """
+        # 执行Lua脚本
+        await r.eval(string, 1, key_lock, value_lock)
+
 
     
