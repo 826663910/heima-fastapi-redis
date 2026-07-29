@@ -5,6 +5,8 @@ from sqlalchemy import select, update   # SQL查询构造器
 from sqlalchemy import or_  # 或
 from ..database import get_db, get_redis    # 获取异步数据库会话和redis客户端
 from .. import models, schemas, auth  # 导入模型、模式和认证
+from redis.asyncio import Redis # 异步Redis客户端
+import json # 用于序列化和反序列化
 
 router = APIRouter(
     prefix="/voucher",
@@ -49,6 +51,7 @@ async def get_seckill(shop_id: int, db: Annotated[AsyncSession, '数据库会话
 @router.post('/')
 async def create_seckill(post: schemas.VoucherSeckillPost, 
                            db: Annotated[AsyncSession, '数据库会话', Depends(get_db)],
+                           r: Annotated[Redis, 'redis客户端', Depends(get_redis)],
                            current_user: Annotated[dict, '当前用户', Depends(auth.check_login)]):
     
     # 开启事务块，退出时自动 commit，异常时自动 rollback
@@ -58,6 +61,9 @@ async def create_seckill(post: schemas.VoucherSeckillPost,
         voucher = models.Voucher(**base_post)   # 将post转为orm对象
         db.add(voucher)  # 添加到数据库
 
+        # 序列化并缓存
+        cache_data = post.model_dump(exclude={'stock', 'start_time', 'end_time'}, mode='josn')
+        
         # 如果为1, 则添加秒杀券数据, 否则不添加
         if post.type ==1:
             await db.flush()    # 刷新数据库(提交前, 获取voucher_id)
@@ -71,6 +77,19 @@ async def create_seckill(post: schemas.VoucherSeckillPost,
             # 添加秒杀券数据
             seckill = models.VoucherSeckill(**seckill_data)
             db.add(seckill)
+
+            # 将秒杀券数据添加到缓存数据中
+            cache_data = {
+                'voucher_id': voucher.id,
+                'stock': post.stock,
+                'start_time': post.start_time,
+                'end_time': post.end_time
+            }
+        else:
+            cache_data = None
+
+        # 将缓存数据写入redis
+        await r.set(f'voucher:{voucher.id}', json.dumps(cache_data, default=str))
 
     await db.refresh(voucher)   # 刷新orm对象
     return voucher  # 返回优惠卷

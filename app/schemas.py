@@ -78,9 +78,9 @@ class VoucherPost(BaseModel):
 
 
 class VoucherSeckillPost(VoucherPost):
-    stock: int
-    start_time: datetime
-    end_time: datetime
+    stock: Optional[int] = None
+    start_time: Optional[datetime] = None
+    end_time: Optional[datetime] = None
 
 class VoucherPatch(BaseModel):
     title: Optional[str] = None
